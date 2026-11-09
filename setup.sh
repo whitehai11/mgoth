@@ -3,7 +3,8 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$ROOT_DIR/.env"
-DATA_DEFAULT="$ROOT_DIR/data"
+DATA_DEFAULT="/opt/mgoth/data"
+PROXY_NETWORK_DEFAULT="npm_default"
 
 if [[ "${EUID}" -ne 0 ]]; then echo "Run this script with sudo: sudo bash setup.sh" >&2; exit 1; fi
 if [[ ! -r /etc/os-release ]]; then echo "Cannot identify this operating system." >&2; exit 1; fi
@@ -56,18 +57,22 @@ existing_secret="$(read_env SPOTIFY_CLIENT_SECRET)"
 if [[ -n "$existing_secret" ]]; then read -r -s -p "Spotify Client Secret (press Enter to keep the stored value): " spotify_secret;else read -r -s -p "Spotify Client Secret (press Enter to configure later): " spotify_secret;fi
 echo;spotify_secret="${spotify_secret:-$existing_secret}";set_env SPOTIFY_CLIENT_SECRET "$spotify_secret";unset spotify_secret existing_secret
 
-current_root="$(read_env DATA_ROOT)";read -r -p "Persistent Spotify application data directory [${current_root:-$DATA_DEFAULT}]: " data_input;DATA_ROOT="${data_input:-${current_root:-$DATA_DEFAULT}}";[[ "$DATA_ROOT" == /* ]] || DATA_ROOT="$ROOT_DIR/$DATA_ROOT"
+current_root="$(read_env DATA_ROOT)"
+# Older deployments stored application files one level below DATA_ROOT in an app/ directory.
+if [[ -n "$current_root" ]]; then
+ legacy_root="$current_root";[[ "$legacy_root" == /* ]] || legacy_root="$ROOT_DIR/$legacy_root"
+ if [[ -d "$legacy_root/app" && ! -e "$legacy_root/spotify-token.enc" ]]; then current_root="$legacy_root/app";fi
+fi
+read -r -p "Persistent Spotify application data directory [${current_root:-$DATA_DEFAULT}]: " data_input;DATA_ROOT="${data_input:-${current_root:-$DATA_DEFAULT}}";[[ "$DATA_ROOT" == /* ]] || DATA_ROOT="$ROOT_DIR/$DATA_ROOT"
 case "$DATA_ROOT" in *:*|*$'\n'*) echo "The data directory cannot contain a colon or newline." >&2;exit 1;; esac
 set_env DATA_ROOT "$DATA_ROOT"
 
-current_proxy_network="$(read_env PROXY_NETWORK)";read -r -p "Existing Docker reverse-proxy network (leave blank if proxy runs on the host) [${current_proxy_network}]: " proxy_network_input;PROXY_NETWORK="${proxy_network_input:-$current_proxy_network}"
-if [[ -n "$PROXY_NETWORK" ]]; then
- if [[ ! "$PROXY_NETWORK" =~ ^[A-Za-z0-9_.-]+$ ]] || ! docker network inspect "$PROXY_NETWORK" >/dev/null 2>&1; then echo "Enter the name of an existing Docker network used by the reverse proxy." >&2;exit 1;fi
- set_env PROXY_NETWORK "$PROXY_NETWORK";set_env COMPOSE_FILE "docker-compose.yml:deploy/docker-compose.proxy.yml"
-else set_env PROXY_NETWORK "";set_env COMPOSE_FILE "docker-compose.yml";fi
+current_proxy_network="$(read_env PROXY_NETWORK)";read -r -p "Existing Docker reverse-proxy network [${current_proxy_network:-$PROXY_NETWORK_DEFAULT}]: " proxy_network_input;PROXY_NETWORK="${proxy_network_input:-${current_proxy_network:-$PROXY_NETWORK_DEFAULT}}"
+if [[ ! "$PROXY_NETWORK" =~ ^[A-Za-z0-9_.-]+$ ]] || ! docker network inspect "$PROXY_NETWORK" >/dev/null 2>&1; then echo "Create or select the existing reverse-proxy Docker network (default: $PROXY_NETWORK_DEFAULT), then rerun setup." >&2;exit 1;fi
+set_env PROXY_NETWORK "$PROXY_NETWORK";set_env COMPOSE_FILE "docker-compose.yml:deploy/docker-compose.proxy.yml"
 
 ensure_secret ADMIN_TOKEN;ensure_secret SESSION_SECRET;ensure_secret TOKEN_ENCRYPTION_KEY
-mkdir -p "$DATA_ROOT/app";chown 1000:1000 "$DATA_ROOT/app";chmod 750 "$DATA_ROOT/app";chmod 600 "$ENV_FILE"
+mkdir -p "$DATA_ROOT";chown 1000:1000 "$DATA_ROOT";chmod 750 "$DATA_ROOT";chmod 600 "$ENV_FILE"
 
 cd "$ROOT_DIR"
 echo "Building the website and private Spotify administration service…"
@@ -87,5 +92,5 @@ if (( ready==0 )); then docker compose --env-file "$ENV_FILE" ps;echo "The servi
 echo "Deployment is healthy. Configure your existing HTTPS reverse proxy to forward the domain to http://127.0.0.1:8080."
 echo "The private Spotify administration API listens on 127.0.0.1:3001 and is not connected to the public proxy network."
 if [[ -n "$PROXY_NETWORK" ]]; then echo "For a Docker reverse proxy, use http://mgoth-web:3000 on '$PROXY_NETWORK'.";fi
-echo "Persistent Spotify application data: $DATA_ROOT/app"
+echo "Persistent Spotify application data: $DATA_ROOT"
 echo "Use the private /spotify/connect endpoint to authorize Spotify; instructions are in README.md."
