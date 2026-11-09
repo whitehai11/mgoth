@@ -7,8 +7,8 @@ A one-page personal site with a monochrome wireframe identity, a private Spotify
 Use a fresh Ubuntu or Debian server with a public DNS record for the domain and an HTTPS reverse proxy already running. Clone this repository, enter its directory, and run the setup script:
 
 ```bash
-git clone <repository-url>
-cd mgoth.de
+git clone https://github.com/whitehai11/mgoth.git
+cd mgoth
 sudo bash setup.sh
 ```
 
