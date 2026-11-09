@@ -12,7 +12,7 @@ sudo bash setup.sh
 
 The idempotent setup script installs Docker Engine and Compose when needed, preserves saved secrets, asks for the public domain and Spotify credentials, and defaults persistent application storage to `/opt/mgoth`. It checks that the existing Docker network `npm_default` is available, attaches the public web service to it, then builds and starts the web and private administration services. It creates the storage directory when needed and does not install or configure a reverse proxy.
 
-Forward the domain from the existing proxy to `http://mgoth-web:3000` on `npm_default`. The web service is also available on host loopback at `http://127.0.0.1:8080`. The private administration API is available only on host loopback at `http://127.0.0.1:3001` and is not connected to the proxy network.
+Forward the domain from the existing proxy to `http://mgoth-web:3000` on `npm_default`. The web service has no host-published port; NPM reaches it over the shared Docker network. The private administration API is available only on host loopback at `http://127.0.0.1:3001` and is not connected to the proxy network.
 
 ### Spotify setup
 

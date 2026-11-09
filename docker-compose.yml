@@ -10,8 +10,6 @@ services:
       DATA_DIR: /data/app
       NODE_ENV: production
       ADMIN_TOKEN: public-process-disabled-administration-secret-0000
-    ports:
-      - "127.0.0.1:8080:3000"
     volumes:
       - ${DATA_ROOT:-./data}:/data/app
     healthcheck:

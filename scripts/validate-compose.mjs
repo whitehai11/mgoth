@@ -6,7 +6,7 @@ const mainDoc=parseDocument(await readFile(new URL('../docker-compose.yml',impor
 assert.equal(mainDoc.errors.length,0,mainDoc.errors.map(e=>e.message).join('\n'));
 const compose=mainDoc.toJS();
 assert.deepEqual(Object.keys(compose.services).sort(),['admin','web']);
-assert.deepEqual(compose.services.web.ports,['127.0.0.1:8080:3000']);
+assert.ok(!compose.services.web.ports,'The public web service is reached through the reverse-proxy Docker network.');
 assert.deepEqual(compose.services.admin.ports,['127.0.0.1:3001:3001']);
 for(const service of Object.values(compose.services))assert.ok(service.healthcheck);
 assert.deepEqual(compose.services.admin.networks,['admin-private']);

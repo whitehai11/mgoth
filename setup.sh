@@ -84,13 +84,12 @@ ready=0
 for _ in $(seq 1 150); do
  web_id="$(docker compose --env-file "$ENV_FILE" ps -q web)";admin_id="$(docker compose --env-file "$ENV_FILE" ps -q admin)"
  web_health="$(docker inspect --format '{{.State.Health.Status}}' "$web_id" 2>/dev/null || true)";admin_health="$(docker inspect --format '{{.State.Health.Status}}' "$admin_id" 2>/dev/null || true)"
- if [[ "$web_health" == healthy && "$admin_health" == healthy ]] && curl -fsS --max-time 3 http://127.0.0.1:8080/api/health >/dev/null 2>&1 && curl -fsS --max-time 3 http://127.0.0.1:3001/health >/dev/null 2>&1; then ready=1;break;fi
+ if [[ "$web_health" == healthy && "$admin_health" == healthy ]] && curl -fsS --max-time 3 http://127.0.0.1:3001/health >/dev/null 2>&1; then ready=1;break;fi
  sleep 2
 done
 if (( ready==0 )); then docker compose --env-file "$ENV_FILE" ps;echo "The services did not become healthy. Inspect logs with: sudo docker compose logs --tail=100" >&2;exit 1;fi
 
-echo "Deployment is healthy. Configure your existing HTTPS reverse proxy to forward the domain to http://127.0.0.1:8080."
+echo "Deployment is healthy. Configure your existing HTTPS reverse proxy to forward the domain to http://mgoth-web:3000 on '$PROXY_NETWORK'."
 echo "The private Spotify administration API listens on 127.0.0.1:3001 and is not connected to the public proxy network."
-if [[ -n "$PROXY_NETWORK" ]]; then echo "For a Docker reverse proxy, use http://mgoth-web:3000 on '$PROXY_NETWORK'.";fi
 echo "Persistent Spotify application data: $DATA_ROOT"
 echo "Use the private /spotify/connect endpoint to authorize Spotify; instructions are in README.md."
