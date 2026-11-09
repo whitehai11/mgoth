@@ -10,7 +10,7 @@ Use an Ubuntu or Debian server with DNS configured for the public domain and an 
 sudo bash setup.sh
 ```
 
-The idempotent setup script installs Docker Engine and Compose when needed, preserves saved secrets, asks for the public domain and Spotify credentials, and defaults persistent application storage to `/opt/mgoth/data`. It checks that the existing Docker network `npm_default` is available, attaches the public web service to it, then builds and starts the web and private administration services. It creates the storage directory when needed and does not install or configure a reverse proxy.
+The idempotent setup script installs Docker Engine and Compose when needed, preserves saved secrets, asks for the public domain and Spotify credentials, and defaults persistent application storage to `/opt/mgoth`. It checks that the existing Docker network `npm_default` is available, attaches the public web service to it, then builds and starts the web and private administration services. It creates the storage directory when needed and does not install or configure a reverse proxy.
 
 Forward the domain from the existing proxy to `http://mgoth-web:3000` on `npm_default`. The web service is also available on host loopback at `http://127.0.0.1:8080`. The private administration API is available only on host loopback at `http://127.0.0.1:3001` and is not connected to the proxy network.
 
@@ -22,7 +22,7 @@ Create a Spotify Developer app and add this redirect URI:
 https://YOUR_DOMAIN/api/spotify/callback
 ```
 
-Enter the Spotify Client ID and Client Secret when prompted. The app requests only `user-read-currently-playing` and `user-read-recently-played`. The encrypted refresh token is stored directly in the selected data directory, defaulting to `/opt/mgoth/data/spotify-token.enc`. If Spotify revokes authorization, the site shows a disconnected state; reconnect through the private API.
+Enter the Spotify Client ID and Client Secret when prompted. The app requests only `user-read-currently-playing` and `user-read-recently-played`. The encrypted refresh token is stored directly in the selected data directory, defaulting to `/opt/mgoth/spotify-token.enc`. If Spotify revokes authorization, the site shows a disconnected state; reconnect through the private API.
 
 Request a private authorization URL on the server:
 

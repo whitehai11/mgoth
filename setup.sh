@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$ROOT_DIR/.env"
-DATA_DEFAULT="/opt/mgoth/data"
+DATA_DEFAULT="/opt/mgoth"
 PROXY_NETWORK_DEFAULT="npm_default"
 
 if [[ "${EUID}" -ne 0 ]]; then echo "Run this script with sudo: sudo bash setup.sh" >&2; exit 1; fi
