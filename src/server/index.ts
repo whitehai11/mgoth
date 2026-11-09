@@ -1,0 +1,15 @@
+import express from 'express';
+import helmet from 'helmet';
+import {pinoHttp} from 'pino-http';
+import {rateLimit} from 'express-rate-limit';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {publicApi} from './routes/api.js';
+import {env} from './lib/env.js';
+import {logger} from './lib/logger.js';
+const app=express();app.disable('x-powered-by');app.set('trust proxy',1);app.use(pinoHttp({logger}));app.use(helmet({contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'"],styleSrc:["'self'","'unsafe-inline'"],imgSrc:["'self'",'https://i.scdn.co','https://*.scdn.co','data:'],connectSrc:["'self'"],fontSrc:["'self'"],objectSrc:["'none'"],baseUri:["'self'"],frameAncestors:["'none'"]}},crossOriginResourcePolicy:{policy:'cross-origin'}}));app.use(express.json({limit:'32kb'}));app.use('/api',rateLimit({windowMs:60_000,limit:180,standardHeaders:'draft-8',legacyHeaders:false}));app.use('/api',publicApi);
+const clientRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../client');
+app.use(express.static(clientRoot,{index:false,maxAge:'1d',etag:true,setHeaders(res,file){if(file.endsWith('index.html'))res.setHeader('Cache-Control','no-cache');}}));app.get('*splat',(req,res,next)=>{if(req.path.startsWith('/api/')){res.status(404).json({error:'Not found'});return;}res.sendFile(path.join(clientRoot,'index.html'),error=>{if(error)next(error);});});
+app.use((err:unknown,_req:express.Request,res:express.Response,_next:express.NextFunction)=>{logger.error({err},'Unhandled public request error');res.status(500).json({error:'Internal server error'});});
+const server=app.listen(env.PORT,'0.0.0.0',()=>logger.info({port:env.PORT},'mgoth.de public server listening'));
+function shutdown(){server.close(()=>process.exit(0));setTimeout(()=>process.exit(1),10_000).unref();}process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);

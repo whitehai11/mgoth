@@ -1,0 +1,129 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mgoth-de:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data/app
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:8080:3000"
+    volumes:
+      - ${DATA_ROOT:-./data}/app:/data/app
+    depends_on:
+      transmission:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "Promise.all([fetch('http://127.0.0.1:3000/api/health')]).then(r=>process.exit(r.every(x=>x.ok)?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+
+  admin:
+    image: mgoth-de:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data/app
+      NODE_ENV: production
+    command: ["node", "dist/server/admin.js"]
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - ${DATA_ROOT:-./data}/app:/data/app
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+
+  worker:
+    image: mgoth-de:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data/app
+      NODE_ENV: production
+    command: ["node", "dist/server/worker.js"]
+    volumes:
+      - ${DATA_ROOT:-./data}/app:/data/app
+    depends_on:
+      web:
+        condition: service_healthy
+      transmission:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs=require('fs');try{const s=fs.statSync('/data/app/worker.heartbeat');process.exit(Date.now()-s.mtimeMs<(Number(process.env.CATALOG_SYNC_HOURS)*3600000+129600000)?0:1)}catch{process.exit(1)}"]
+      interval: 15m
+      timeout: 5s
+      retries: 2
+      start_period: 10m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+
+  transmission:
+    image: ${TRANSMISSION_IMAGE:-lscr.io/linuxserver/transmission:latest}
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Europe/Berlin}
+      USER: ${TRANSMISSION_USER:-mgoth}
+      PASS: ${TRANSMISSION_PASSWORD:?Set TRANSMISSION_PASSWORD in .env}
+      PEERPORT: ${PEER_PORT:-51413}
+      HOST_WHITELIST: ""
+    ports:
+      - "${PEER_PORT:-51413}:${PEER_PORT:-51413}/tcp"
+      - "${PEER_PORT:-51413}:${PEER_PORT:-51413}/udp"
+    volumes:
+      - ${DATA_ROOT:-./data}/transmission-config:/config
+      - ${DATA_ROOT:-./data}/isos:/downloads
+      - ${DATA_ROOT:-./data}/watch:/watch
+    healthcheck:
+      test: ["CMD-SHELL", "code=$(curl -sS -o /dev/null -w '%{http_code}' -u \"$$USER:$$PASS\" http://127.0.0.1:9091/transmission/rpc || true); [ \"$$code\" = 200 ] || [ \"$$code\" = 409 ]"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    security_opt:
+      - no-new-privileges:true
+
+volumes: {}
