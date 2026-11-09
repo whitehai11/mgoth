@@ -3,3 +3,4 @@ export type SpotifySnapshot={connected:boolean;status:'playing'|'paused'|'inacti
 export type Distro={id:string;name:string;sourceUrl:string;downloadPage:string};
 export type Release={id:string;distro:string;name:string;version:string;architecture:string;date:string|null;sizeBytes:number|null;torrentUrl:string|null;magnetUrl:string|null;downloadPage:string;sourceUrl:string;syncedAt:string;seedStatus:'queued'|'downloading'|'verifying'|'seeding'|'stopped'|'unavailable'};
 export type Catalog={distributions:Distro[];releases:Release[];updatedAt:string|null};
+export type PublicStats={uploadedBytes:number;downloadedBytes:number;uploadSpeed:number;downloadSpeed:number;activeSeeds:number;downloading:number;completed:number;connectedPeers:number;ratio:number;updatedAt:string;trackingSince:string;stale:boolean};
