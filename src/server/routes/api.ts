@@ -4,23 +4,22 @@ import {z} from 'zod';
 import {adminAuth,setAdminCookie} from '../lib/auth.js';
 import {env} from '../lib/env.js';
 import {logger} from '../lib/logger.js';
-import {DISTROS,readCatalog,getTorrentBytes,syncCatalog} from '../services/catalog.js';
 import {createOAuthState,exchangeCode,getSnapshot,spotifyAuthorizationUrl,spotifyConfigured,verifyOAuthState} from '../services/spotify.js';
-import {getSeedStatuses,reconcileSeeds,torrentHealth,getPublicStats} from '../services/transmission.js';
+
 export const publicApi=Router();
 export const adminApi=Router();
 const originOk=(origin:string|undefined)=>!origin||origin===env.PUBLIC_BASE_URL||origin.startsWith('http://localhost:')||origin.startsWith('http://127.0.0.1:');
-const sameSecret=(a:string,b:string)=>{const left=Buffer.from(a);const right=Buffer.from(b);return left.length===right.length&&timingSafeEqual(left,right);};
-publicApi.get('/health',async(_req,res)=>{const transmission=await torrentHealth();res.status(200).json({status:'ok',dependencies:{transmission:transmission?'ok':'degraded'},timestamp:new Date().toISOString()});});
-publicApi.get('/spotify',async(_req,res)=>res.json(await getSnapshot()));
-publicApi.get('/stats',async(_req,res)=>{res.set('Cache-Control','public, max-age=10, stale-while-revalidate=20');res.json(await getPublicStats());});
-let catalogCache:{at:number;value:unknown}|null=null;
-publicApi.get('/catalog',async(_req,res)=>{if(catalogCache&&Date.now()-catalogCache.at<15_000){res.set('Cache-Control','public, max-age=15, stale-while-revalidate=30');return res.json(catalogCache.value);}const releases=await readCatalog();const statuses=await getSeedStatuses(releases);const value={distributions:DISTROS.map(d=>({id:d.id,name:d.name,sourceUrl:d.sourceUrl,downloadPage:d.downloadPage})),releases:releases.map(({...r})=>({...r,seedStatus:statuses.get(r.id)??'unavailable'})),updatedAt:releases.reduce<string|null>((max,r)=>!max||r.syncedAt>max?r.syncedAt:max,null)};catalogCache={at:Date.now(),value};res.set('Cache-Control','public, max-age=15, stale-while-revalidate=30');res.json(value);});
-publicApi.get('/torrents/:id/file',async(req,res)=>{if(!/^[a-zA-Z0-9_-]{1,80}$/.test(req.params.id??''))return res.status(400).json({error:'Invalid torrent identifier'});const release=(await readCatalog()).find(r=>r.id===req.params.id);if(!release?.torrentUrl)return res.status(404).json({error:'Official torrent file is not available'});const data=await getTorrentBytes(release.id);if(!data)return res.status(503).json({error:'Official torrent is not cached yet; use the distribution download page'});res.set({'content-type':'application/x-bittorrent','content-length':String(data.length),'content-disposition':`attachment; filename="${release.id}.torrent"`,'cache-control':'public, max-age=3600','x-content-type-options':'nosniff'});res.send(data);});
+const sameSecret=(a:string,b:string)=>{const left=Buffer.from(a),right=Buffer.from(b);return left.length===right.length&&timingSafeEqual(left,right);};
+
+publicApi.get('/health',(_req,res)=>res.json({status:'ok',timestamp:new Date().toISOString()}));
+publicApi.get('/spotify',async(_req,res)=>{res.set('Cache-Control','public, max-age=15, stale-while-revalidate=15');res.json(await getSnapshot());});
+publicApi.get('/spotify/callback',async(req,res)=>{
+ const state=typeof req.query.state==='string'?req.query.state:'';const code=typeof req.query.code==='string'?req.query.code:'';
+ if(!verifyOAuthState(state)||!code){logger.warn('Spotify OAuth callback rejected');return res.redirect(`${env.PUBLIC_BASE_URL}/?spotify=error`);}
+ try{await exchangeCode(code);res.redirect(`${env.PUBLIC_BASE_URL}/?spotify=connected`);}catch(error){logger.error({error},'Spotify OAuth exchange failed');res.redirect(`${env.PUBLIC_BASE_URL}/?spotify=error`);}
+});
+
 adminApi.post('/login',async(req,res)=>{if(!originOk(req.get('origin')))return res.status(403).json({error:'Origin rejected'});const password=z.string().min(1).max(512).safeParse(req.body?.password);if(!password.success||!sameSecret(password.data,env.ADMIN_TOKEN))return res.status(401).json({error:'Invalid credentials'});setAdminCookie(res);res.json({authenticated:true});});
 adminApi.post('/logout',adminAuth,(_req,res)=>{res.clearCookie('mgoth_admin',{path:'/'});res.status(204).end();});
-adminApi.get('/spotify/connect',adminAuth,(_req,res)=>{if(!spotifyConfigured())return res.status(409).json({error:'Spotify client credentials are not configured'});const state=createOAuthState();res.json({url:spotifyAuthorizationUrl(state)});});
-publicApi.get('/spotify/callback',async(req,res)=>{const state=typeof req.query.state==='string'?req.query.state:'';const code=typeof req.query.code==='string'?req.query.code:'';if(!verifyOAuthState(state)||!code){logger.warn('Spotify OAuth callback rejected');return res.redirect(`${env.PUBLIC_BASE_URL}/?spotify=error`);}try{await exchangeCode(code);res.redirect(`${env.PUBLIC_BASE_URL}/?spotify=connected`);}catch(error){logger.error({error},'Spotify OAuth exchange failed');res.redirect(`${env.PUBLIC_BASE_URL}/?spotify=error`);}});
-adminApi.get('/status',adminAuth,async(_req,res)=>{const snapshot=await getSnapshot(true);const health=await torrentHealth();res.json({spotify:{connected:snapshot.connected,status:snapshot.status},transmission:health?'ok':'unavailable'});});
-adminApi.post('/catalog/sync',adminAuth,async(_req,res)=>{try{const result=await syncCatalog();await reconcileSeeds();res.json(result);}catch(error){logger.error({error},'Manual catalog sync failed');res.status(502).json({error:'Catalog synchronization failed'});}});
-adminApi.post('/seeds/reconcile',adminAuth,async(_req,res)=>{await reconcileSeeds();res.json({accepted:true});});
+adminApi.get('/spotify/connect',adminAuth,(_req,res)=>{if(!spotifyConfigured())return res.status(409).json({error:'Spotify client credentials are not configured'});res.json({url:spotifyAuthorizationUrl(createOAuthState())});});
+adminApi.get('/status',adminAuth,async(_req,res)=>{const snapshot=await getSnapshot(true);res.json({spotify:{connected:snapshot.connected,status:snapshot.status}});});
